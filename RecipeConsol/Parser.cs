@@ -19,14 +19,16 @@ namespace RecipeConsole
 
         public static bool InWork
         {
-            get { return Count > 0 || Instance.threads > 0; }
+            get { return Count > 0 || Instance.ThreadsCount > 0; }
         }
 
         private int _threads;
-        private int threads
+        private int ThreadsCount
         {
             get { return _threads; }
-            set { _threads = value;
+            set
+            {
+                _threads = value;
                 if (value <= 0 && EmptyQueue != null) EmptyQueue(this, null);
             }
         }
@@ -37,18 +39,39 @@ namespace RecipeConsole
         }
 
         private Queue<ParserInfo> queue = new Queue<ParserInfo>();
-        List<string> urls = new List<string>();
-        
+
         public static event EventHandler EmptyQueue;
         public static event EventHandler ParsingSuccess;
 
-        private Parser()
+        Dictionary<string, Func<ParserInfo, bool>> Actions = new Dictionary<string, Func<ParserInfo, bool>>();
+
+        public static void RegisterAction(string name, Func<ParserInfo, bool> action)
         {
-            var timer = new Timer(100);
+            if (Instance.Actions.ContainsKey(name))
+                Instance.Actions[name] = action;
+            else Instance.Actions.Add(name, action);
+        }
+
+        Timer timer;
+
+        private int _interval;
+        public int Interval
+        {
+            get { return _interval; }
+            set 
+            { 
+                _interval = value;
+                if (timer != null)
+                    timer.Interval = value;
+            }
+        }
+
+        private Parser(int interval = 100)
+        {
+            _interval = interval;
+            timer = new Timer(interval);
             timer.Elapsed += (sender, e) =>
                 {
-                    //var self = sender as DispatcherTimer;
-                    //if (self == null) return;
                     try
                     {
                         if (Instance.queue.Count > 0)
@@ -59,7 +82,6 @@ namespace RecipeConsole
                     }
                     catch (InvalidOperationException)
                     {
-                        //throw error
                     }
 
                 };
@@ -69,38 +91,16 @@ namespace RecipeConsole
                 timer.Stop();
 
             ParsingSuccess += (sender, args) =>
-                threads--;
+                ThreadsCount--;
         }
 
         private void Parse(ParserInfo info)
         {
-            switch (info.type)
+            if (Actions.ContainsKey(info.type))
             {
-                case ParserType.Global_2K:
-                    Parse2KGlobal(info);
-                    break;
-            }
-
-            if (ParsingSuccess != null) ParsingSuccess(info.url, null);
-        }
-
-        private void Parse2KGlobal(ParserInfo info)
-        {
-            threads++;
-            Uri test = new Uri(info.url);
-            var host = test.Host;
-
-            try
-            {
-                var dom = CQ.CreateFromUrl(info.url);
-                var links = dom["h2 a"];
-
-                foreach (var link in links)
-                    urls.Add(host + link["href"]);
-            }
-            catch (Exception)
-            {
-
+                ThreadsCount++;
+                if (Actions[info.type](info) && ParsingSuccess != null) 
+                    ParsingSuccess(info.url, null);
             }
         }
     }

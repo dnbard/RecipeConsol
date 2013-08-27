@@ -9,11 +9,12 @@ namespace RecipeConsole
     public struct ParserInfo
     {
         public string url;
-        public ParserType type;
-    }
-
-    public enum ParserType
-    {
-        Global_2K
+        
+        private string _type;
+        public string type
+        {
+            get { return _type; }
+            set { _type = value.ToLowerInvariant(); }
+        }
     }
 }
